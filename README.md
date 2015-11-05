@@ -13,9 +13,9 @@ npm i yamvish-router --save
 
 It uses [routedsl](https://github.com/nomocas/routedsl) to manag matching.
 
-## Example browser side
+## Example 
 
-__Require__ : it uses history pushState/popState by default and you should load a polyfills for that for IE8/IE9 (as [min-history](https://github.com/nomocas/min-history))
+__Require__ : Browser side, it uses history pushState/popState by default and so you should load a polyfills for IE8/IE9 (as [min-history](https://github.com/nomocas/min-history))
 
 ```javascript
 var y = require('yamvish');
