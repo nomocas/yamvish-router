@@ -2,16 +2,15 @@
 
 In-place routing plugin for [yamvish](https://github.com/nomocas/yamvish).
 
+It uses [routedsl](https://github.com/nomocas/routedsl) to manage matching.
+
+
 ## install
 
 As it comes as an CommonJS module usable with browserify by example, simply install it with npm in your project folder, where you have previously installed yamvish.
 ```
 npm i yamvish-router --save
 ```
-
-## Route DSL
-
-It uses [routedsl](https://github.com/nomocas/routedsl) to manag matching.
 
 ## Example 
 
