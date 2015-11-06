@@ -12,9 +12,64 @@ As it comes as an CommonJS module usable with browserify by example, simply inst
 npm i yamvish-router --save
 ```
 
-## Example 
+__Require__ : Browser side, it uses history pushState/popState by default and so you should also load a polyfills for IE8/IE9 (as [min-history](https://github.com/nomocas/min-history))
 
-__Require__ : Browser side, it uses history pushState/popState by default and so you should load a polyfills for IE8/IE9 (as [min-history](https://github.com/nomocas/min-history))
+## Example with simple route
+
+When you define a route on a node, it will be showned (style.display = '') only if route matchs.
+
+```javascript
+var y = require('yamvish');
+require('yamvish-router');
+
+var view = new y.View()
+// bind this view to root router (i.e. that will respond to y.navigateTo)
+.rootRouter()
+.div(
+	y().route('/$') // assign route to containing div
+	.p('home content')
+)
+.div(
+	y().route('/hello') // assign route to containing div
+	.p('hello page content')
+	.div(
+		y().route('./world') // assign route to containing div
+		.p('hello/world content')
+	)
+)
+// mount view somewhere
+.mount('#anID');
+
+y.navigateTo('/hello/world');
+```
+
+## Example with simple route that catch variables
+
+When a route catch some variables it injects them in curent context under '$route'.
+
+```javascript
+var y = require('yamvish');
+require('yamvish-router');
+
+var view = new y.View()
+// bind this view to root router (i.e. that will respond to y.navigateTo)
+.rootRouter()
+.div(
+	y().route('/$') // assign route to containing div
+	.p('home content')
+)
+.div(
+	y().route('/hello/s:page') // catched 'page' from route will be set in context.data.$route.page
+	.p('content for {{ $route.page }}')
+)
+// mount view somewhere
+.mount('#anID');
+
+y.navigateTo('/hello/world');
+```
+
+
+## Example with map
 
 ```javascript
 var y = require('yamvish');
@@ -24,19 +79,81 @@ var view = new y.View()
 // bind this view to root router
 .rootRouter()
 .div(
-	y().route('/$')
-	.p('home content')
-)
-.div(
-	y().route('/hello')
-	.p('hello page content')
-	.div(
-		y().route('./world')
-		.p('hello/world content')
-	)
+	y().route({ // assign route to containing div. 
+
+		// first route that match will inject associatd template in routed div
+
+		'/$': y().p('home content'),
+
+		'/hello': y().p('hello content')
+					.div(
+						y().route('./world') // assign route to containing div
+						.p('hello/world content')
+					)
+	})	
 )
 // mount view somewhere
 .mount('#anID');
+
+y.navigateTo('/hello/world');
+```
+
+## Example with map and resource loading
+
+__Require__ : you need to define a 'get' function in router before using with loadable resource
+
+```javascript
+var y = require('yamvish');
+require('yamvish-router');
+
+y.router.get = function(req, opt){
+	return ...; // return a promise that will be fullfiled with loaded resource
+};
+
+var view = new y.View()
+// bind this view to root router
+.rootRouter()
+.div(
+	y().route({
+	
+		'/$': 'some/resource/home.html'
+
+		'/hello': 'some/resource/hello.html'
+	})	
+)
+// mount view somewhere
+.mount('#anID');
+
+y.navigateTo('/');
+```
+
+
+## Route-map and context
+
+Each route from a route-map has its own context where catched variables will be injected if any.
+All those context are independents.
+
+```javascript
+var y = require('yamvish');
+require('yamvish-router');
+
+var view = new y.View()
+.rootRouter()
+.div(
+	y().route({
+
+		'/$': y().p('home content'),
+
+		'/hello/?s:page': y().p('hello content for {{ page || 'foo' }}'),
+
+		'/campaign/?s:page': y().p('campaign content for {{ page || 'bar' }}')
+				
+	})	
+)
+// mount view somewhere
+.mount('#anID');
+
+y.navigateTo('/hello/world');
 ```
 
 ## Licence
