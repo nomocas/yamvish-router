@@ -8,11 +8,6 @@
 		Route: Route,
 	};
 
-	y.navigateTo = function(url, title, state) {
-		executeRouting(parseURL(url), y.env()._route.subrouters);
-		window.history.pushState(state, title  || '', url);
-	};
-
 	function parseURL(url) {
 		var route = url.split('/');
 		if (route[0] === '')
@@ -56,8 +51,8 @@
 			_route.unbind = function() {
 				removeChildRouter(parent._route.subrouters, node);
 			};
-			//if (parent._route.descriptor)
-			executeNodeRouting(node, parent._route.descriptor);
+			if (parent._route.descriptor)
+				executeNodeRouting(node, parent._route.descriptor);
 		}
 		return parent;
 	}
@@ -75,7 +70,7 @@
 			removeChildRouter(env._route.subrouters, node);
 		};
 		if (envi._route.descriptor)
-			executeNodeRouting(node);
+			executeNodeRouting(node, envi._route.descriptor);
 	}
 
 	router.bindToParentRouter = bindToParentRouter;
@@ -231,7 +226,7 @@
 	}
 
 	function executeNodeRouting(node, url) {
-		var r = checkRoute(node, url || parseURL(window.history.location.relative), 0);
+		var r = checkRoute(node, url, 0);
 		if (r) {
 			executeRouteTree(r);
 			if (r.descriptor)
@@ -243,6 +238,7 @@
 	function executeRouting(url, routes) {
 		var ok = false;
 		try {
+			url = parseURL(url);
 			(routes || y.env()._route.subrouters).forEach(function(router) {
 				var r = executeNodeRouting(router, url);
 				if (r)
@@ -257,7 +253,6 @@
 
 	y.Template.prototype.rootRouter = y.View.prototype.rootRouter = function() {
 		return this.exec(function(context, container) {
-			var self = this;
 			this._route = this._route ||  {
 				subrouters: []
 			};
@@ -279,7 +274,6 @@
 			route = routes;
 		}
 		return this.exec(function(context, container) {
-			var self = this;
 			router.init(y.env());
 			this._route = {
 				route: route,
@@ -298,40 +292,56 @@
 				});
 			}
 
-			if (container && container !== this) {
+			if (container && container !== this) { // bind to current container if any
 				container._route = container._route || {
 					subrouters: [],
 					virtual: true
 				};
 				bindToParentRouter(this, container);
-			} else if (!bindToParentRouter(this))
+			} else if (!bindToParentRouter(this)) // try to bind to parent node that hold a _route entry
 				console.warn('yamvish route has not be attached to parent router. will never fire.', route);
 		}, true);
 	};
+
+	y.navigateTo = function(url, title, state) {
+		var env = y.env();
+		executeRouting(url, env._route.subrouters);
+		if (!env.isServer)
+			window.history.pushState(state, title  || '', url);
+	};
+
+	router.execute = executeRouting;
 
 	router.init = function(env) {
 		if (env._route)
 			return;
 
 		env._route = {
-			subrouters: []
+			subrouters: [],
+			descriptor: {
+				index: 0,
+				route: []
+			}
 		};
 
-		// popstate event from back/forward in browser
-		window.addEventListener('popstate', function(e) {
-			executeRouting(parseURL(window.history.location.relative), env._route.subrouters);
-		});
+		if (!env.isServer) {
+			// popstate event from back/forward in browser
+			window.addEventListener('popstate', function(e) {
+				console.log('pop state : ', location.pathname + (location.serch || ''));
+				executeRouting(location.pathname + (location.serch || ''), env._route.subrouters);
+			});
 
-		// hashchange event from back/forward in browser
-		// window.addEventListener('hashchange', function(e) {
-		// 	console.log("* HASH CHANGE " + history.location.hash, " - ", JSON.stringify(history.state));
-		// });
+			// hashchange event from back/forward in browser
+			// window.addEventListener('hashchange', function(e) {
+			// 	console.log("* HASH CHANGE " + history.location.hash, " - ", JSON.stringify(history.state));
+			// });
 
-		// setstate event when pushstate or replace state
-		//window.addEventListener('setstate', function(e) {
-		//executeRouting(parseURL(window.history.location.relative), env._route.subrouters);
-		// console.log("* SET STATE : %s - ", url, JSON.stringify(window.history.state));
-		//});
+			// setstate event when pushstate or replace state
+			//window.addEventListener('setstate', function(e) {
+			//executeRouting(parseURL(window.history.location.relative), env._route.subrouters);
+			// console.log("* SET STATE : %s - ", url, JSON.stringify(window.history.state));
+			//});
+		}
 	};
 
 	module.exports = router;
