@@ -35,46 +35,32 @@
 				return arr.splice(i, 1);
 	}
 
-	function bindToParentRouter(node, parent) {
+	function bindToParentRouter(node, parent, dontExecRoute) {
 		var _route = node._route;
-		// unbind from current parent if any
-		if (_route.unbind) {
-			_route.unbind();
-			_route.unbind = null;
-		}
-		// bind to parent router or to env.routers
+		parent = parent ||  getParentRouter(node);
 		if (!parent)
-			parent = getParentRouter(node);
-		node._route.parent = parent;
-		if (parent) {
+			throw new Error('yamvish-router : no parent found to bind current route.');
+		if (_route.parent !== parent) {
+			if (_route.unbind) {
+				_route.unbind();
+				_route.unbind = null;
+			}
+			_route.parent = parent;
 			(parent._route.subrouters = parent._route.subrouters || []).push(node);
 			_route.unbind = function() {
 				removeChildRouter(parent._route.subrouters, node);
+				_route.parent = null;
 			};
-			if (parent._route.descriptor)
-				executeNodeRouting(node, parent._route.descriptor);
+		}
+		// console.log('bindToParentRouter : parent : ', parent);
+		if (!dontExecRoute && parent._route.descriptor) {
+			// console.log('bindToParentRouter : parent has descriptor : executing route : ', parent._route.descriptor);
+			executeNodeRouting(node, parent._route.descriptor);
 		}
 		return parent;
 	}
 
-	function bindToRootRouter(node) {
-		var _route = node._route,
-			envi = y.env();
-		// unbind from current parent if any
-		if (_route.unbind)
-			_route.unbind();
-		if (!envi._route)
-			router.init(envi);
-		envi._route.subrouters.push(node);
-		_route.unbind = function() {
-			removeChildRouter(env._route.subrouters, node);
-		};
-		if (envi._route.descriptor)
-			executeNodeRouting(node, envi._route.descriptor);
-	}
-
 	router.bindToParentRouter = bindToParentRouter;
-	router.bindToRootRouter = bindToRootRouter;
 
 	function checkSubrouters(subrouters, descriptor, lastIndex, children) {
 		subrouters.forEach(function(sub) {
@@ -116,6 +102,7 @@
 		var children = [],
 			matched,
 			descriptor;
+
 		node._route.route.some(function(item) {
 			descriptor = item.route.match(url);
 			if (descriptor)
@@ -137,39 +124,56 @@
 	}
 
 	function applyContent(templ, node, _route, context) {
-		if (_route.current && _route.current.unmount) {
+		if (_route.current) {
 			if (_route.current._route && _route.current._route.unbind)
 				_route.current._route.unbind();
-			_route.current.unmount();
+			if (_route.current.unmount)
+				_route.current.unmount();
 		}
 		var r;
 		if (templ.__yContainer__)
 			r = templ.mount(node);
-		else if (typeof templ === 'string')
-			r = node.innerHTML = templ;
 		else if (templ.__yTemplate__)
 			r = templ.toContainer(context).mount(node);
-		if (r._route)
-			bindToParentRouter(r, node);
+		else if (typeof templ === 'string') {
+			node.innerHTML = templ;
+			r = node.childNodes[0];
+		}
+		_route.current = r;
+		if (!r._route)
+			r._route = {
+				subrouters: []
+			};
+		bindToParentRouter(r, node);
+		if (_route.once) {
+			_route.once.call(r, context, _route.container);
+			_route.once = null;
+		}
 		if (_route.success)
-			_route.success.call(node, context);
+			_route.success.call(r, context, _route.container);
+		// console.log('after apply content : ', r._route);
+		r.dispatchEvent(y.env().isServer ? 'routed' : new Event('routed'));
 		return r;
-	};
+	}
 
 	function getRoutedContent(node, _route, item, $route) {
 		if (!router.get)
 			throw new Error('yamvish router has no get for retrieving resource. please bind one before use.');
 		if (item.instance && !item.resource.__interpolable__) {
-			_route.current = applyContent(item.instance, node, _route, item.context);
+			applyContent(item.instance, node, _route, item.context);
 		} else {
-			item.context.set('$route', $route);
-			var p = router.get(item.resource.__interpolable__ ? item.resource.output(item.context) : item.resource)
-				.then(function(templ) {
-					_route.current = item.instance = applyContent(templ, node, _route, item.context);
-				}, function(e) {
-					console.error('resource fail to load : ', item.resource, e);
-				});
-			item.context.waiting(p);
+			var resource = item.resource.__interpolable__ ? item.resource.output(item.context) : item.resource;
+			if (typeof resource !== 'string')
+				item.instance = applyContent(resource, node, _route, item.context);
+			else {
+				var p = router.get(resource)
+					.then(function(templ) {
+						item.instance = applyContent(templ, node, _route, item.context);
+					}, function(e) {
+						console.error('resource fail to load : ', item.resource, e);
+					});
+				item.context.waiting(p);
+			}
 		}
 	}
 
@@ -177,47 +181,55 @@
 		todo : 
 			maybe merge matched route in context.data.$route in place of route replacement
 	 */
-	function executeRouteTree(treeNode) {
+	function walkRouteTree(treeNode) {
+		// console.log('walkRouteTree : ', treeNode);
 		var node = treeNode.node,
 			_route = node._route,
 			item = treeNode.item,
 			descriptor = treeNode.descriptor,
-			context = node.context || _route.context;
+			context = node.context || _route.context,
+			env = y.env();
 		if (descriptor) {
-			// console.log('executeRouteTree : node has descriptor', _route);
 			_route.descriptor = descriptor;
-			if (_route.once) {
-				_route.once.call(node, context, _route.container);
-				_route.once = null;
-			}
+			// console.log('walkTree : ', _route, node, descriptor.route.slice(0, descriptor.index));
 			var $route = {
 				__local: '/' + descriptor.route.slice(0, descriptor.index).join('/')
 			};
 			for (var i in descriptor.output)
 				$route[i] = descriptor.output[i];
 			if (item) {
+				// console.log('walkTree has item : ', item);
 				if (!item.context)
 					item.context = new y.Context({
 						parent: context
 					});
+				if (!item.context.data.$route || item.context.data.$route.__local !== $route.__local)
+					item.context.set('$route', $route);
 				if (!item.instance || _route.current !== item.instance || item.resource.__interpolable__)
 					getRoutedContent(node, _route, item, $route);
 				else {
-					item.context.set('$route', $route);
 					if (_route.success)
 						_route.success.call(node, item.context, _route.container);
+					item.instance.dispatchEvent(env.isServer ? 'routed' : new Event('routed'));
 				}
 			} else if (context) {
-				context.set('$route', $route);
+				context.delay(function() {}, 0);
+				// console.log('walkTree NO item : ', node);
+				if (!context.data.$route || context.data.$route.__local !== $route.__local)
+					context.set('$route', $route);
+				if (_route.once) {
+					_route.once.call(node, context, _route.container);
+					_route.once = null;
+				}
 				if (_route.success)
 					_route.success.call(node, context, _route.container);
+				node.dispatchEvent(env.isServer ? 'routed' : new Event('routed'));
 			}
 			y.utils.show(node);
 			treeNode.children.forEach(function(child) {
-				executeRouteTree(child);
+				walkRouteTree(child);
 			});
 		} else {
-			// console.log('executeRouteTree : node fail', _route);
 			_route.descriptor = null;
 			if (_route.fail)
 				_route.fail.call(node, context, _route.container);
@@ -228,7 +240,7 @@
 	function executeNodeRouting(node, url) {
 		var r = checkRoute(node, url, 0);
 		if (r) {
-			executeRouteTree(r);
+			walkRouteTree(r);
 			if (r.descriptor)
 				return true;
 		}
@@ -256,7 +268,8 @@
 			this._route = this._route ||  {
 				subrouters: []
 			};
-			bindToRootRouter(this, y.env());
+			router.init(y.env());
+			bindToParentRouter(this, y.env());
 		}, true);
 	};
 
@@ -274,7 +287,8 @@
 			route = routes;
 		}
 		return this.exec(function(context, container) {
-			router.init(y.env());
+			// console.log('Template.route application : ', original, this);
+			y.utils.hide(this);
 			this._route = {
 				route: route,
 				context: context,
@@ -285,7 +299,7 @@
 				subrouters: this._route ? this._route.subrouters : []
 			};
 
-			if (this._route.route.forEach) // shallow copy route map (needed to place local vars after)
+			if (this._route.route.forEach) // shallow copy route map (needed to store local vars after)
 			{
 				this._route.route = this._route.route.map(function(item) {
 					return y.utils.shallowCopy(item);
@@ -294,8 +308,7 @@
 
 			if (container && container !== this) { // bind to current container if any
 				container._route = container._route || {
-					subrouters: [],
-					virtual: true
+					subrouters: []
 				};
 				bindToParentRouter(this, container);
 			} else if (!bindToParentRouter(this)) // try to bind to parent node that hold a _route entry
@@ -306,8 +319,16 @@
 	y.navigateTo = function(url, title, state) {
 		var env = y.env();
 		executeRouting(url, env._route.subrouters);
-		if (!env.isServer)
+		if (!env.isServer && url !== (location.pathname + location.search))
 			window.history.pushState(state, title  || '', url);
+	};
+
+	y.Template.prototype.linkA = function(title, state) {
+		return this.click(function(e) {
+			if (e && e.preventDefault())
+				e.preventDefault();
+			y.navigateTo(e.target.getAttribute('href'), title, state);
+		});
 	};
 
 	router.execute = executeRouting;
@@ -325,22 +346,12 @@
 		};
 
 		if (!env.isServer) {
+			env._route.descriptor.route = parseURL(location.pathname + (location.serch || '')).route;
 			// popstate event from back/forward in browser
 			window.addEventListener('popstate', function(e) {
-				console.log('pop state : ', location.pathname + (location.serch || ''));
+				// console.log('pop state : ', location.pathname + (location.serch || ''));
 				executeRouting(location.pathname + (location.serch || ''), env._route.subrouters);
 			});
-
-			// hashchange event from back/forward in browser
-			// window.addEventListener('hashchange', function(e) {
-			// 	console.log("* HASH CHANGE " + history.location.hash, " - ", JSON.stringify(history.state));
-			// });
-
-			// setstate event when pushstate or replace state
-			//window.addEventListener('setstate', function(e) {
-			//executeRouting(parseURL(window.history.location.relative), env._route.subrouters);
-			// console.log("* SET STATE : %s - ", url, JSON.stringify(window.history.state));
-			//});
 		}
 	};
 
