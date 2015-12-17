@@ -177,10 +177,6 @@
 		}
 	}
 
-	/*
-		todo : 
-			maybe merge matched route in context.data.$route in place of route replacement
-	 */
 	function walkRouteTree(treeNode) {
 		// console.log('walkRouteTree : ', treeNode);
 		var node = treeNode.node,
