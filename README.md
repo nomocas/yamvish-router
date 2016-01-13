@@ -66,7 +66,7 @@ var view = new y.View()
 )
 .div(
 	y.view().route('/hello/s:page')
-	.p('content for {{ $route.output.page }}')
+	.p('content for {{ $route.params.page }}')
 )
 .toContainer(rootContext)
 .mount('#anID');
