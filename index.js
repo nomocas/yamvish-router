@@ -41,7 +41,7 @@ Template.prototype.clickTo = function(href, title, data) {
 	);
 };
 
-var settings = {
+var router = {
 	parser: function(route) {
 		return new Route(route);
 	},
@@ -56,7 +56,7 @@ var settings = {
 			// popstate event from back/forward in browser
 			window.addEventListener('popstate', function(e) {
 				var route = parseURL(location.pathname + (location.search || ''));
-				context.env.data.agora.emit('route:update', route);
+				context.toAgora('route:update', route);
 				document.title = e.state ? (e.state.title || '') : '';
 			});
 		}
@@ -66,16 +66,18 @@ var settings = {
 View.prototype.route = function(route, handler) {
 	var index = this._queue.length + 1,
 		self = this,
-		route = settings.parser(route);
+		route = router.parser(route);
 	return this.exec({
+		// dom output
 		dom: function(context, container, args) {
 			var parentRouter,
 				currentRoute,
 				oldRoute,
 				current,
-				initialised = false,
+				resumed = false,
 				fakeNode = utils.hide(context.env.data.factory.createElement('div')),
 				restTemplate = new Template(self._queue.slice(index));
+
 			container.appendChild(fakeNode);
 			current = fakeNode;
 			context.isRouted = true;
@@ -84,16 +86,19 @@ View.prototype.route = function(route, handler) {
 				if (!container.mountPoint || $route === oldRoute)
 					return;
 				oldRoute = $route;
-				var matched = route.match($route.lastMatched || $route); //route.match($route);
+				var matched = route.match(route.lastMatched ? ($route.lastMatched || $route) : $route);
 				if (matched) {
 					$route.lastMatched = matched;
 					if (handler)
 						handler.call(context, matched);
 					context.set('$route', matched);
-					if (!initialised) {
+					if (!resumed) {
+						var mp = container.mountPoint;
+						container.mountPoint = null;
 						restTemplate.call(container, context);
 						restTemplate = null;
-						initialised = true;
+						resumed = true;
+						container.mountPoint = mp;
 					}
 					if (current === container)
 						return;
@@ -133,9 +138,13 @@ View.prototype.route = function(route, handler) {
 			if (currentRoute)
 				exec(currentRoute, 'set');
 		},
+
+		// string output
 		string: function(context, descriptor, args) {
 
 		},
+
+		// twopass output
 		twopass: {
 			firstPass: function(context, args) {
 
@@ -147,4 +156,4 @@ View.prototype.route = function(route, handler) {
 	}, null, false, true);
 };
 
-module.exports = settings;
+module.exports = router;
