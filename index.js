@@ -1,6 +1,4 @@
-var utils = require('yamvish/lib/utils'),
-	View = require('yamvish/lib/view'),
-	Template = require('yamvish/lib/template'),
+var y = require('yamvish'),
 	Route = require('routedsl');
 
 function findParentRouter(context) {
@@ -23,25 +21,29 @@ function parseURL(url) {
 	};
 }
 
-Template.prototype.clickTo = function(href, title, data) {
+y.Template.prototype.clickTo = function(href, title, data) {
 	return this.client(
 		y().click(function(e) {
 			if (e.preventDefault())
 				e.preventDefault();
-			if (href !== (location.pathname + location.search)) {
-				this.toAgora('route:update', href, title || '', data);
-				window.history.pushState({
-					href: href,
-					title: title,
-					data: data
-				}, title  || '', href);
-				document.title = title || '';
-			}
+			this.navigateTo(href, title, data);
 		})
 	);
 };
 
-var router = {
+y.Context.prototype.navigateTo = function(href, title, data) {
+	if (href !== (location.pathname + location.search)) {
+		this.toAgora('route:update', href, title || '', data);
+		window.history.pushState({
+			href: href,
+			title: title,
+			data: data
+		}, title  || '', href);
+		document.title = title || '';
+	}
+};
+
+var router = y.router = {
 	parser: function(route) {
 		return new Route(route);
 	},
@@ -63,7 +65,7 @@ var router = {
 	}
 };
 
-View.prototype.route = function(route, handler) {
+y.View.prototype.route = function(route, handler) {
 	var index = this._queue.length + 1,
 		self = this,
 		route = router.parser(route);
@@ -75,8 +77,9 @@ View.prototype.route = function(route, handler) {
 				oldRoute,
 				current,
 				resumed = false,
-				fakeNode = utils.hide(context.env.data.factory.createElement('div')),
-				restTemplate = new Template(self._queue.slice(index));
+				skipMounted = true,
+				fakeNode = y.utils.hide(context.env.data.factory.createElement('div')),
+				restTemplate = new y.Template(self._queue.slice(index));
 
 			container.appendChild(fakeNode);
 			current = fakeNode;
@@ -103,11 +106,14 @@ View.prototype.route = function(route, handler) {
 					if (current === container)
 						return;
 					current = container;
-					var nextSibling = utils.findNextSibling(fakeNode);
+					var nextSibling = y.utils.findNextSibling(fakeNode);
 					container.removeChild(fakeNode);
 					container.childNodes.forEach(function(child) {
-						utils.insertBefore(container.mountPoint, child, nextSibling);
+						y.utils.insertBefore(container.mountPoint, child, nextSibling);
 					});
+					if (!skipMounted)
+						container.emit('mounted', context);
+					skipMounted = false;
 				} else {
 					if (current === fakeNode)
 						return;
@@ -116,11 +122,12 @@ View.prototype.route = function(route, handler) {
 					container.childNodes.forEach(function(child) {
 						if (child !== fakeNode) {
 							if (child.__yPureNode__)
-								utils.unmountPureNode(child);
+								y.utils.unmountPureNode(child);
 							else if (child.parentNode)
 								child.parentNode.removeChild(child);
 						}
 					});
+					container.emit('unmounted', context);
 				}
 			};
 			parentRouter = findParentRouter(context);
