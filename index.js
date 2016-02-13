@@ -70,23 +70,22 @@ y.View.prototype.route = function(route, handler) {
 		self = this,
 		route = router.parser(route);
 	return this.exec({
-		// dom output
-		dom: function(context, container, args) {
+		dom: function(context, container) {
 			var parentRouter,
 				currentRoute,
 				oldRoute,
 				current,
 				resumed = false,
 				skipMounted = true,
-				fakeNode = y.utils.hide(context.env.data.factory.createElement('div')),
+				comment = document.createComment('router'),
 				restTemplate = new y.Template(self._queue.slice(index));
 
-			container.appendChild(fakeNode);
-			current = fakeNode;
+			container.appendChild(comment);
+			current = comment;
 			context.isRouted = true;
 
 			var exec = function($route, type) {
-				if (!container.mountPoint || $route === oldRoute)
+				if (!container.parentNode || $route === oldRoute)
 					return;
 				oldRoute = $route;
 				var matched = route.match(route.lastMatched ? ($route.lastMatched || $route) : $route);
@@ -96,36 +95,36 @@ y.View.prototype.route = function(route, handler) {
 						handler.call(context, matched);
 					context.set('$route', matched);
 					if (!resumed) {
-						var mp = container.mountPoint;
-						container.mountPoint = null;
+						var mp = container.parentNode;
+						container.parentNode = null;
 						restTemplate.call(container, context);
 						restTemplate = null;
 						resumed = true;
-						container.mountPoint = mp;
+						container.parentNode = mp;
 					}
 					if (current === container)
 						return;
 					current = container;
-					var nextSibling = y.utils.findNextSibling(fakeNode);
-					container.removeChild(fakeNode);
+					var nextSibling = comment.nextSibling;
+					container.removeChild(comment);
 					container.childNodes.forEach(function(child) {
-						y.utils.insertBefore(container.mountPoint, child, nextSibling);
+						y.utils.insertBefore(container.parentNode, child, nextSibling);
 					});
 					if (!skipMounted)
 						container.emit('mounted', context);
 					skipMounted = false;
 				} else {
-					if (current === fakeNode)
+					if (current === comment)
 						return;
-					current = fakeNode;
-					container.appendChild(fakeNode);
+					current = comment;
+					container.appendChild(comment);
 					container.childNodes.forEach(function(child) {
-						if (child !== fakeNode) {
-							if (child.__yPureNode__)
-								y.utils.unmountPureNode(child);
-							else if (child.parentNode)
-								child.parentNode.removeChild(child);
-						}
+						if (child === comment)
+							return;
+						if (child.__yContainer__)
+							child.unmount();
+						else if (child.parentNode)
+							child.parentNode.removeChild(child);
 					});
 					container.emit('unmounted', context);
 				}
@@ -145,22 +144,18 @@ y.View.prototype.route = function(route, handler) {
 			if (currentRoute)
 				exec(currentRoute, 'set');
 		},
-
 		// string output
-		string: function(context, descriptor, args) {
+		string: function(context, descriptor) {
 
 		},
-
 		// twopass output
-		twopass: {
-			firstPass: function(context, args) {
+		firstPass: function(context) {
 
-			},
-			secondPass: function(context, descriptor, args) {
+		},
+		secondPass: function(context, descriptor) {
 
-			}
 		}
-	}, null, false, true);
+	}, null, true);
 };
 
 module.exports = router;
