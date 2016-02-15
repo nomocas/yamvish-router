@@ -22,13 +22,14 @@ function parseURL(url) {
 }
 
 y.Template.prototype.clickTo = function(href, title, data) {
-	return this.client(
-		y().click(function(e) {
-			if (e.preventDefault())
-				e.preventDefault();
-			this.navigateTo(href, title, data);
-		})
-	);
+	return this.click(function(e) {
+		e.preventDefault();
+		this.navigateTo(href, title, data);
+	});
+};
+
+y.Template.prototype.aNav = function(href, title, content) {
+	return this.a(href, y().clickTo(href, title), content);
 };
 
 y.Context.prototype.navigateTo = function(href, title, data) {
