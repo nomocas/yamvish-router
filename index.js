@@ -75,18 +75,13 @@ y.View.prototype.route = function(route, handler) {
 			var parentRouter,
 				currentRoute,
 				oldRoute,
-				current,
-				resumed = false,
-				skipMounted = true,
-				comment = document.createComment('router'),
 				restTemplate = new y.Template(self._queue.slice(index));
 
-			container.appendChild(comment);
-			current = comment;
+			container.addWitness('router : ' + route.original);
 			context.isRouted = true;
 
 			var exec = function($route, type) {
-				if (!container.parentNode || $route === oldRoute)
+				if ($route === oldRoute)
 					return;
 				oldRoute = $route;
 				var matched = route.match(route.lastMatched ? ($route.lastMatched || $route) : $route);
@@ -95,39 +90,25 @@ y.View.prototype.route = function(route, handler) {
 					if (handler)
 						handler.call(context, matched);
 					context.set('$route', matched);
-					if (!resumed) {
-						var mp = container.parentNode;
-						container.parentNode = null;
+					if (restTemplate) { // not yet fully constructed
 						restTemplate.call(container, context);
 						restTemplate = null;
-						resumed = true;
-						container.parentNode = mp;
+						if (container.parentNode)
+							container.emit('mounted', container);
 					}
-					if (current === container)
+					if (!container.witness.parentNode) // parent node has not been mounted
 						return;
-					current = container;
-					var nextSibling = comment.nextSibling;
-					container.removeChild(comment);
-					container.childNodes.forEach(function(child) {
-						y.utils.insertBefore(container.parentNode, child, nextSibling);
-					});
-					if (!skipMounted)
-						container.emit('mounted', context);
-					skipMounted = false;
+					if (container.parentNode) // is already mounted
+					{
+						if (container.closing && container.transitionIn)
+							container.transitionIn();
+						return;
+					}
+					container.remount();
 				} else {
-					if (current === comment)
+					if (!container.parentNode) // is not mounted
 						return;
-					current = comment;
-					container.appendChild(comment);
-					container.childNodes.forEach(function(child) {
-						if (child === comment)
-							return;
-						if (child.__yContainer__)
-							child.unmount();
-						else if (child.parentNode)
-							child.parentNode.removeChild(child);
-					});
-					container.emit('unmounted', context);
+					container.unmount(true);
 				}
 			};
 			parentRouter = findParentRouter(context);
