@@ -1,6 +1,6 @@
 {
   "name": "yamvish-router",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "dynamic-in-place routing for yamvish",
   "main": "index.js",
   "scripts": {
