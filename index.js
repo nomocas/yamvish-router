@@ -22,9 +22,11 @@ function parseURL(url) {
 }
 
 y.Template.prototype.clickTo = function(href, title, data) {
-	return this.click(function(e) {
-		e.preventDefault();
-		this.navigateTo(href, title, data);
+	return this.dom(function(context, node) {
+		node.addEventListener('click', function(e) {
+			e.preventDefault();
+			context.navigateTo(href, title, data);
+		});
 	});
 };
 
@@ -53,8 +55,8 @@ var router = y.router = {
 			var route = parseURL(location.pathname + (location.search || ''));
 			context.isRouted = true;
 			context.set('$route', route);
-			context.onAgora('route:update', function(route, title, state) {
-				this.set('$route', route);
+			context.onAgora('route:update', function(context, route, title, state) {
+				context.set('$route', route);
 			});
 			// popstate event from back/forward in browser
 			window.addEventListener('popstate', function(e) {
