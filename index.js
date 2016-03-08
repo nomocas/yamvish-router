@@ -35,7 +35,9 @@ y.Template.prototype.aNav = function(href, title, content) {
 };
 
 y.Context.prototype.navigateTo = function(href, title, data) {
-	if (href !== (location.pathname + location.search)) {
+	if (href !== router.current) {
+		router.current = href;
+		// update hash
 		this.toAgora('route:update', href, title || '', data);
 		window.history.pushState({
 			href: href,
@@ -52,23 +54,37 @@ var router = y.router = {
 	},
 	bindHistory: function(context) {
 		if (!context.env.data.isServer) {
-			var route = parseURL(location.pathname + (location.search || ''));
+			this.current = location.pathname + (location.search || '');
+			var route = parseURL(this.current);
+			console.log('router bind to history', route, this.current)
 			context.isRouted = true;
+			var self = this;
 			context.set('$route', route);
 			context.onAgora('route:update', function(context, route, title, state) {
 				context.set('$route', route);
 			});
 			// popstate event from back/forward in browser
+
 			window.addEventListener('popstate', function(e) {
-				var route = parseURL(location.pathname + (location.search || ''));
+				var newURL = location.pathname + (location.search || '');
+				// console.log('pop state : ', e, newURL);
+				if (newURL === self.current) {
+					// console.log('same url : so return');
+					return;
+				}
+				self.current = newURL;
+				var route = parseURL(newURL);
 				context.toAgora('route:update', route);
 				document.title = e.state ? (e.state.title || '') : '';
 			});
+			// window.addEventListener('hashchange', function(e) {
+			// 	console.log('hashchange : ', e);
+			// });
 		}
 	}
 };
 
-y.View.prototype.route = function(route, handler) {
+y.Template.prototype.route = function(route, handler) {
 	var index = this._queue.length + 1,
 		self = this,
 		route = router.parser(route);
@@ -82,7 +98,7 @@ y.View.prototype.route = function(route, handler) {
 			container.addWitness('router : ' + route.original);
 			context.isRouted = true;
 
-			var exec = function($route, type) {
+			var exec = function($route) {
 				if ($route === oldRoute)
 					return;
 				oldRoute = $route;
@@ -122,11 +138,11 @@ y.View.prototype.route = function(route, handler) {
 			container.on('mounted', function() {
 				var currentRoute = parentRouter ? parentRouter.data.$route : null;
 				if (currentRoute)
-					exec(currentRoute, 'set');
+					exec(currentRoute);
 			});
 
 			if (currentRoute)
-				exec(currentRoute, 'set');
+				exec(currentRoute);
 		},
 		// string output
 		string: function(context, descriptor) {
