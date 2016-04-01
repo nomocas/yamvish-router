@@ -15,7 +15,6 @@ function parseURL(url) {
 	if (route[route.length - 1] === '')
 		route.pop();
 	return {
-		length: route.length,
 		route: route,
 		index: 0
 	};
@@ -38,19 +37,34 @@ y.Context.prototype.navigateTo = function(href, title, data) {
 	if (href !== router.current) {
 		router.current = href;
 		// update hash
-		this.toAgora('route:update', href, title || '', data);
+		var route = parseURL(href);
 		window.history.pushState({
 			href: href,
-			title: title,
-			data: data
+			title: title ||  '',
+			data: data || {}
 		}, title  || '', href);
 		document.title = title || '';
+		this.toAgora('route:update', route);
 	}
 };
 
+
 var router = y.router = {
+	parseURL: parseURL,
 	parser: function(route) {
 		return new Route(route);
+	},
+	push: function(href, title, data) {
+		// console.log('router . push ', href)
+		if (this.current !== href) {
+			window.history.pushState({
+				href: href,
+				title: title || '',
+				data: data || {}
+			}, title || '', href);
+		}
+		this.current = href;
+		// var route = parseURL(this.current);
 	},
 	bindHistory: function(context) {
 		if (!context.env.data.isServer) {
@@ -60,7 +74,9 @@ var router = y.router = {
 			context.isRouted = true;
 			var self = this;
 			context.set('$route', route);
-			context.onAgora('route:update', function(context, route, title, state) {
+			router.oldRoute = route;
+			context.onAgora('route:update', function(context, route) {
+				router.oldRoute = context.data.$route;
 				context.set('$route', route);
 			});
 			// popstate event from back/forward in browser
@@ -89,7 +105,7 @@ y.Template.prototype.route = function(route, handler) {
 		self = this,
 		route = router.parser(route);
 	return this.exec({
-		dom: function(context, container) {
+		dom: function(context, container, args) {
 			var parentRouter,
 				currentRoute,
 				oldRoute,
@@ -106,28 +122,26 @@ y.Template.prototype.route = function(route, handler) {
 				if (matched) {
 					$route.lastMatched = matched;
 					if (handler)
-						handler.call(context, matched);
+						handler.call(context, matched, container);
+					// var contextOldRoute = context.data.$route;
 					context.set('$route', matched);
 					if (restTemplate) { // not yet fully constructed
-						restTemplate.call(container, context);
+						restTemplate.call(container, context, container);
 						restTemplate = null;
 						if (container.parentNode)
 							container.emit('mounted', container);
 					}
+					// if (!contextOldRoute || contextOldRoute.matched !== matched.matched)
+					container.emit('routed', $route);
 					if (!container.witness.parentNode) // parent node has not been mounted
 						return;
-					if (container.parentNode) // is already mounted
-					{
-						if (container.closing && container.transitionIn)
-							container.transitionIn();
-						return;
-					}
-					container.remount();
-				} else {
-					if (!container.parentNode) // is not mounted
-						return;
+					if (!container.parentNode)
+						container.remount();
+					// else is already mounted
+					else if (container.closing && container.transitionIn)
+						container.transitionIn();
+				} else if (container.parentNode)
 					container.unmount(true);
-				}
 			};
 			parentRouter = findParentRouter(context);
 			if (parentRouter) {
