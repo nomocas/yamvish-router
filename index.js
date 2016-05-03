@@ -1,24 +1,10 @@
 var y = require('yamvish'),
-	Route = require('routedsl');
+	Route = require('routedsl'),
+	utils = require('./lib/utils');
 
-function findParentRouter(context) {
-	var parent = context.parent;
-	if (!parent)
-		return null;
-	return parent && parent.isRouted ? parent : findParentRouter(parent);
-}
-
-function parseURL(url) {
-	var route = url.split('/');
-	if (route[0] === '')
-		route.shift();
-	if (route[route.length - 1] === '')
-		route.pop();
-	return {
-		route: route,
-		index: 0
-	};
-}
+y.Template.prototype.route = function(route, handler) {
+	return this.exec('route', [this._queue.length + 1, this, new Route(route), handler], true);
+};
 
 y.Template.prototype.clickTo = function(href, title, data) {
 	return this.dom(function(context, node) {
@@ -37,7 +23,7 @@ y.Context.prototype.navigateTo = function(href, title, data) {
 	if (href !== router.current) {
 		router.current = href;
 		// update hash
-		var route = parseURL(href);
+		var route = utils.parseURL(href);
 		window.history.pushState({
 			href: href,
 			title: title ||  '',
@@ -48,14 +34,13 @@ y.Context.prototype.navigateTo = function(href, title, data) {
 	}
 };
 
-
 var router = y.router = {
-	parseURL: parseURL,
+	parseURL: utils.parseURL,
 	parser: function(route) {
 		return new Route(route);
 	},
 	push: function(href, title, data) {
-		// console.log('router . push ', href)
+		throw new Error('router.push');
 		if (this.current !== href) {
 			window.history.pushState({
 				href: href,
@@ -64,12 +49,11 @@ var router = y.router = {
 			}, title || '', href);
 		}
 		this.current = href;
-		// var route = parseURL(this.current);
 	},
 	bindHistory: function(context) {
 		if (!context.env.data.isServer) {
 			this.current = location.pathname + (location.search || '');
-			var route = parseURL(this.current);
+			var route = utils.parseURL(this.current);
 			console.log('router bind to history', route, this.current)
 			context.isRouted = true;
 			var self = this;
@@ -89,7 +73,7 @@ var router = y.router = {
 					return;
 				}
 				self.current = newURL;
-				var route = parseURL(newURL);
+				var route = utils.parseURL(newURL);
 				context.toAgora('route:update', route);
 				document.title = e.state ? (e.state.title || '') : '';
 			});
@@ -100,76 +84,6 @@ var router = y.router = {
 	}
 };
 
-y.Template.prototype.route = function(route, handler) {
-	var index = this._queue.length + 1,
-		self = this,
-		route = router.parser(route);
-	return this.exec({
-		dom: function(context, container, args) {
-			var parentRouter,
-				currentRoute,
-				oldRoute,
-				restTemplate = new y.Template(self._queue.slice(index));
 
-			container.addWitness('router : ' + route.original);
-			context.isRouted = true;
-
-			var exec = function($route) {
-				if ($route === oldRoute)
-					return;
-				oldRoute = $route;
-				var matched = route.match(route.lastMatched ? ($route.lastMatched || $route) : $route);
-				if (matched) {
-					$route.lastMatched = matched;
-					if (handler)
-						handler.call(context, matched, container);
-					// var contextOldRoute = context.data.$route;
-					context.set('$route', matched);
-					if (restTemplate) { // not yet fully constructed
-						restTemplate.call(container, context, container);
-						restTemplate = null;
-						if (container.parentNode)
-							container.emit('mounted', container);
-					}
-					// if (!contextOldRoute || contextOldRoute.matched !== matched.matched)
-					container.emit('routed', $route);
-					if (!container.witness.parentNode) // parent node has not been mounted
-						return;
-					if (!container.parentNode)
-						container.remount();
-					// else is already mounted
-					else if (container.closing && container.transitionIn)
-						container.transitionIn();
-				} else if (container.parentNode)
-					container.unmount(true);
-			};
-			parentRouter = findParentRouter(context);
-			if (parentRouter) {
-				container.binds = container.binds ||  [];
-				parentRouter.subscribe('$route', exec, false, container.binds);
-				currentRoute = parentRouter.data.$route;
-			}
-			container.on('mounted', function() {
-				var currentRoute = parentRouter ? parentRouter.data.$route : null;
-				if (currentRoute)
-					exec(currentRoute);
-			});
-
-			if (currentRoute)
-				exec(currentRoute);
-		},
-		// string output
-		string: function(context, descriptor) {
-
-		},
-		// twopass output
-		firstPass: function(context) {
-
-		},
-		secondPass: function(context, descriptor) {
-
-		}
-	}, null, true);
-};
 
 module.exports = router;
