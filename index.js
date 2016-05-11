@@ -6,10 +6,11 @@ y.Template.prototype.route = function(route, handler) {
 	return this.exec('route', [this._queue.length + 1, this, new Route(route), handler], true);
 };
 
-y.Template.prototype.clickTo = function(href, title, data) {
+y.Template.prototype.clickTo = function(href, title, data, preventDefault) {
 	return this.dom(function(context, node) {
 		node.addEventListener('click', function(e) {
-			e.preventDefault();
+			if (node.tagName === 'A' || preventDefault)
+				e.preventDefault();
 			context.navigateTo(href || node.getAttribute('href'), title, data);
 		});
 	});
