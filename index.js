@@ -52,9 +52,10 @@ var router = y.router = {
 		}
 		this.current = href;
 	},
-	bindHistory: function(context) {
+	bindHistory: function(context, opt) {
 		if (context.env.data.isServer)
 			return;
+		opt = opt || {};
 		this.current = location.pathname + (location.search || '');
 		var route = utils.parseURL(this.current);
 		console.log('yamvish router : bind to history', route, this.current)
@@ -65,13 +66,19 @@ var router = y.router = {
 		context.onAgora('route:update', function(context, route) {
 			router.oldRoute = context.data.$route;
 			context.set('$route', route);
+			if (opt.manageError)
+				context.stabilised().then(function(s) {
+					var lastIndex = Math.max(route.index, route.lastMatched ? route.lastMatched.index : 0);
+					if (window.location.pathname !== '/' && lastIndex < route.route.length)
+						context.navigateTo('/error/404', 'error', null, true);
+				});
 		});
 		// popstate event from back/forward in browser
 		window.addEventListener('popstate', function(e) {
 			var newURL = location.pathname + (location.search || '');
 			// console.log('pop state : ', e, newURL);
 			if (newURL === self.current) {
-				console.log('router popstate : same url : so return');
+				// console.log('router popstate : same url : so return');
 				return;
 			}
 			self.current = newURL;
@@ -79,12 +86,15 @@ var router = y.router = {
 			context.toAgora('route:update', route);
 			document.title = e.state ? (e.state.title || '') : '';
 		});
-		// window.addEventListener('hashchange', function(e) {
-		// 	console.log('hashchange : ', e);
-		// });
+		if (opt.manageError)
+			setTimeout(function() {
+				context.stabilised().then(function(s) {
+					var lastIndex = Math.max(route.index, route.lastMatched ? route.lastMatched.index : 0);
+					if (window.location.pathname !== '/' && lastIndex < route.route.length)
+						context.navigateTo('/error/404', 'error', null, true);
+				});
+			}, 40);
 	}
 };
-
-
 
 module.exports = router;
