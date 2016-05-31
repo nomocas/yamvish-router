@@ -20,13 +20,13 @@ y.Template.prototype.aNav = function(href, title, content) {
 	return this.a(href, y().clickTo(href, title), content);
 };
 
-y.Context.prototype.navigateTo = function(href, title, data) {
+y.Context.prototype.navigateTo = function(href, title, data, replaceState) {
 	// console.log('navigateTo', href, title, data)
 	if (href !== router.current) {
 		router.current = href;
 		// update hash
 		var route = utils.parseURL(href);
-		window.history.pushState({
+		window.history[replaceState ? 'replaceState' : 'pushState']({
 			href: href,
 			title: title ||  '',
 			data: data || {}
