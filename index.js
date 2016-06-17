@@ -63,11 +63,12 @@ var router = y.router = {
 		var self = this;
 		context.set('$route', route);
 		router.oldRoute = route;
-		context.onAgora('route:update', function(context, route) {
-			router.oldRoute = context.data.$route;
-			context.set('$route', route);
+		context.onAgora('route:update', function(emitter, route) {
+			// console.log('route:update at router : ', route);
+			router.oldRoute = this.data.$route;
+			this.set('$route', route);
 			if (opt.manageError)
-				context.stabilised().then(function(s) {
+				this.stabilised().then(function(s) {
 					var lastIndex = Math.max(route.index, route.lastMatched ? route.lastMatched.index : 0);
 					if (window.location.pathname !== '/' && lastIndex < route.route.length)
 						context.navigateTo('/error/404', 'error', null, true);
