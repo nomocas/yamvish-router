@@ -22,6 +22,9 @@ y.Template.prototype.aNav = function(href, title, content) {
 
 y.Context.prototype.navigateTo = function(href, title, data, replaceState) {
 	// console.log('navigateTo', href, title, data)
+	href = y.interpolable(href);
+	if (href.__interpolable__)
+		href = href.output(this);
 	if (href !== router.current) {
 		router.current = href;
 		// update hash
